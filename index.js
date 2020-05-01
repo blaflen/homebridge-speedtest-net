@@ -24,6 +24,8 @@ function SpeedtestNet(log, config, api) {
   this.name = config['name'] || 'SpeedtestNet';
   this.displayName = config.name;
   this.interval = (config.interval * 60 * 1000) || 60 * 60 * 1000;
+  this.maxdlspeed = config.maxdlspeed;
+  this.maxulspeed = config.maxulspeed;
   !this.dlspeed ? this.dlspeed = 0 : this.dlspeed;
   !this.ulspeed ? this.ulspeed = 0 : this.ulspeed;
   !this.ping ? this.ping = 0 : this.ping;
@@ -95,23 +97,42 @@ SpeedtestNet.prototype = {
     this.informationService = new Service.AccessoryInformation()
       .setCharacteristic(Characteristic.Name, this.name)
       .setCharacteristic(Characteristic.Identify, this.name)
-      .setCharacteristic(Characteristic.Manufacturer, 'Kienz')
+      .setCharacteristic(Characteristic.Manufacturer, 'Kienz+Laflen')
       .setCharacteristic(Characteristic.Model, 'SpeedtestNet')
       .setCharacteristic(Characteristic.SerialNumber, '11111100100');
 
-    this.Sensor = new Service.TemperatureSensor(this.name);
+    this.Sensor = new Service.HumiditySensor(this.name);
 
-    this.Sensor.getCharacteristic(Characteristic.CurrentTemperature)
+    this.Sensor.getCharacteristic(Characteristic.CurrentRelativeHumidity)
       .setProps({
-        unit: 'Mbps',
-        maxValue: 9999,
+        format: Characteristic.Formats.FLOAT,
+        unit: Characteristic.Units.PERCENTAGE,
+        maxValue: 100,
         minValue: 0,
-        minStep: 0.01,
+        minStep: 1,
         perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
       })
-      .updateValue(this.dlspeed);
+      .updateValue(Math.round(100*this.dlspeed/this.maxdlspeed));
 
-    this.Sensor.addCharacteristic(Characteristic.TemperatureDisplayUnits);
+    this.Sensor.getCharacteristic(Characteristic.StatusLowBattery)
+      .setProps({
+        format: Characteristic.Formats.UINT8,
+        maxValue: 1,
+        minValue: 0,
+        validValues: [0,1],
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+      })
+      .updateValue((this.ulspeed>this.maxulspeed/2)? 0 : 1);
+
+    this.Sensor.getCharacteristic(Characteristic.StatusFault)
+      .setProps({
+        format: Characteristic.Formats.UINT8,
+        maxValue: 1,
+        minValue: 0,
+        validValues: [0,1],
+        perms: [Characteristic.Perms.READ, Characteristic.Perms.NOTIFY]
+      })
+      .updateValue((this.ping>20)?1:0);
 
     this.Sensor.addCharacteristic(Characteristic.DownloadSpeed);
     this.Sensor.getCharacteristic(Characteristic.DownloadSpeed)
@@ -166,7 +187,9 @@ SpeedtestNet.prototype = {
       self.log('Ping: ' + self.ping + ' ms');
       self.log('External IP: ' + self.externalIp);
 
-      self.Sensor.getCharacteristic(Characteristic.CurrentTemperature).updateValue(self.dlspeed);
+      self.Sensor.getCharacteristic(Characteristic.CurrentRelativeHumidity).updateValue(Math.round(100*self.dlspeed/self.maxdlspeed));
+      self.Sensor.getCharacteristic(Characteristic.StatusLowBattery).updateValue((self.ulspeed<self.maxulspeed/2)? 1 : 0);
+      self.Sensor.getCharacteristic(Characteristic.StatusFault).updateValue((self.ping>20)?1:0);
       self.Sensor.getCharacteristic(Characteristic.DownloadSpeed).updateValue(self.dlspeed);
       self.Sensor.getCharacteristic(Characteristic.UploadSpeed).updateValue(self.ulspeed);
       self.Sensor.getCharacteristic(Characteristic.Ping).updateValue(self.ping);
@@ -182,7 +205,9 @@ SpeedtestNet.prototype = {
       self.ping = self.ping;
       self.externalIp = self.externalIp;
 
-      self.Sensor.getCharacteristic(Characteristic.CurrentTemperature).updateValue(self.dlspeed);
+      self.Sensor.getCharacteristic(Characteristic.CurrentRelativeHumidity).updateValue(Math.round(100*self.dlspeed/self.maxdlspeed));
+      self.Sensor.getCharacteristic(Characteristic.StatusLowBattery).updateValue((self.ulspeed<self.maxulspeed/2)? 1 : 0);
+      self.Sensor.getCharacteristic(Characteristic.StatusFault).updateValue((self.ping>20)?1:0);
       self.Sensor.getCharacteristic(Characteristic.DownloadSpeed).updateValue(self.dlspeed);
       self.Sensor.getCharacteristic(Characteristic.UploadSpeed).updateValue(self.ulspeed);
       self.Sensor.getCharacteristic(Characteristic.Ping).updateValue(self.ping);
@@ -202,7 +227,7 @@ SpeedtestNet.prototype = {
 
         self.historyService.addEntry({
           time: new Date().getTime() / 1000,
-          temp: self.Sensor.getCharacteristic(Characteristic.CurrentTemperature).value,
+          temp: self.Sensor.getCharacteristic(Characteristic.DownloadSpeed).value,
           pressure: self.Sensor.getCharacteristic(Characteristic.Ping).value,
           humidity: self.Sensor.getCharacteristic(Characteristic.UploadSpeed).value
         });
